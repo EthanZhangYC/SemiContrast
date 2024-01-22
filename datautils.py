@@ -90,7 +90,7 @@ def create_label_list(image_list):
     return label_list
 
 class WHS_dataset(data.Dataset):
-    def __init__(self, data_dir, transforms=None, zscore=True, labeled=False, is_real_test=False):
+    def __init__(self, data_dir, zscore=True, labeled=False, is_real_test=False, new_transforms=None, mode=''):
         print(data_dir)
         # import pdb;pdb.set_trace()
         if isinstance(data_dir, list):
@@ -109,8 +109,14 @@ class WHS_dataset(data.Dataset):
             self.labels = create_label_list(self.imgs)
         else:
             self.labeled = False
-        # print(self.raw_data[:10])
-        self.transform = transforms
+        # self.transform = transforms
+        
+        self.mode = mode
+        if new_transforms:
+            self.new_transforms = eval('get_%s_pipeline_transform()'%mode)
+        else:
+            self.new_transforms = None
+        
         self.idx_mapping = {i: i for i in range(len(self.raw_data))}
         self.zscore=zscore
         self.is_real_test=is_real_test
@@ -139,16 +145,20 @@ class WHS_dataset(data.Dataset):
         img_slice = re.findall('.+_[0-9]+_([0-9]+).+', img_path.split('/')[-1])[0]
         img_name = img_path.split('/')[-1]
         
-        if self.zscore:
+        if self.new_transforms:
+            img = img[np.newaxis,np.newaxis,...]
+            img = self.new_transforms(data=img)['data'][0][0]
+        else:
             mean, std = stat_dict_ourdata[img_modal][img_vol]
             img = (img-mean)/std
-        else:
-            img = img * 2 - 1.0
+            img = img.astype(float) 
+        # else:
+        #     img = img * 2 - 1.0
             
         if self.labeled:
             gt_path = re.sub('\.npy','_label.npy',img_path)            
             gt = np.load(gt_path)
-            if self.transform:
+            if not self.new_transforms and self.mode!='test':
                 seq = iaa.Affine(scale=(0.9, 1.1), rotate=(-10, 10))
                 seq_det = seq.to_deterministic()
                 gt = gt.astype(np.uint8)
@@ -156,14 +166,13 @@ class WHS_dataset(data.Dataset):
                 img, segmaps_aug = seq_det(image=img, segmentation_maps=segmap)
                 gt = segmaps_aug.arr.squeeze()
             gt = gt.astype(np.uint8)
-
         else:
             gt=-1
 
         real_modal = MODAL2REAL[img_modal]
         vol_len = vol_stat[real_modal][img_vol]
         
-        img = img.astype(float)        
+               
 
         if self.is_real_test:
             return idx, img[np.newaxis,...], gt, img_vol, img_slice
@@ -193,7 +202,18 @@ class ContrastiveLearningViewGenerator(object):
 
     def __call__(self, x, mean, std):
         x = x[np.newaxis,np.newaxis,...]
+        
+        # x_ori = np.array(x)
+        # x_oriori = np.array(x)
+        # pdb.set_trace()
+        # tmp_transform = get_simclr_pipeline_transform_nonp()
+        # tmp_transform(data=x_ori)
+        
+        return [self.base_transform(data=x)['data'][0] for i in range(self.n_views)]
         return [(self.base_transform(data=x)['data'][0]-mean)/std for i in range(self.n_views)]
+
+
+
 
 def get_supcon_pipeline_transform():
     """Return a set of data augmentation transformations as described in the SemiContrast paper."""
@@ -253,6 +273,32 @@ def get_mocov2_pipeline_transform_old(size, s=1):
         ])
     return data_transforms
 
+
+def get_train_pipeline_transform(target_size=256):
+    """Return a set of data augmentation transformations as described in the SemiContrast paper."""
+    data_transforms = Compose([
+        ResizeTransform(target_size=(target_size,target_size), order=1),    # resize
+        MirrorTransform(axes=(1,)),
+        SpatialTransform(patch_size=(target_size, target_size), random_crop=False,
+                            patch_center_dist_from_border=target_size // 2,
+                            do_elastic_deform=True, alpha=(0., 1000.), sigma=(40., 60.),
+                            do_rotation=True, p_rot_per_sample=0.5,
+                            angle_x=(-0.1, 0.1), angle_y=(0, 1e-8), angle_z=(0, 1e-8),
+                            scale=(0.5, 1.9), p_scale_per_sample=0.5,
+                            border_mode_data="nearest", border_mode_seg="nearest"),
+        NumpyToTensor()
+    ])
+    return data_transforms
+
+def get_test_pipeline_transform(target_size=256):
+    """Return a set of data augmentation transformations as described in the SemiContrast paper."""
+    data_transforms = Compose([
+        ResizeTransform(target_size=(target_size,target_size), order=1),    # resize
+        NumpyToTensor()
+    ])
+    return data_transforms
+
+
 class WHS_dataset_multiview(data.Dataset):
     def __init__(self, data_dir, zscore=True, labeled=False, is_real_test=False, transforms_label=False, multi_view=False, mode='supcon'):
         print(data_dir)
@@ -279,6 +325,8 @@ class WHS_dataset_multiview(data.Dataset):
         self.multi_view = multi_view
         if multi_view:
             self.transforms = ContrastiveLearningViewGenerator(eval('get_%s_pipeline_transform()'%mode))
+        else:
+            self.transforms = eval('get_%s_pipeline_transform()'%mode)
         self.transforms_label = transforms_label
         self.mode=mode
 

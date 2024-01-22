@@ -114,6 +114,9 @@ def parse_option():
                         help='id for recording multiple runs')
     parser.add_argument('--exp_dir', type=str, default='test',
                         help='id for recording multiple runs')
+    
+    parser.add_argument('--new_transform', action='store_true')
+
 
     opt = parser.parse_args()
     
@@ -195,23 +198,28 @@ def set_loader(args):
         'target':"/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like/fake_mr"
     }
     
-    train_dataset_source = WHS_dataset_multiview(data_path_train_unl["source"], multi_view=True)
-    train_loader_source = create_loader(
-        train_dataset_source,
-        batch_size,
-        num_workers=num_workers,
-        shuffle=True
-    )
-    train_dataset_target = WHS_dataset_multiview(data_path_train_unl["target"], multi_view=True)
-    train_loader_target = create_loader(
-        train_dataset_target,
-        batch_size,
-        num_workers=num_workers,
-        shuffle=True
-    )
-
-    # train_lbd_dataset_source = WHS_dataset_multiview("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", multi_view=True, labeled=True, transforms_label=False)
-    train_lbd_dataset_source = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, transforms=True)
+    # train_dataset_source = WHS_dataset_multiview(data_path_train_unl["source"], multi_view=True)
+    # train_dataset_target = WHS_dataset_multiview(data_path_train_unl["target"], multi_view=True)
+    # train_lbd_dataset_source = WHS_dataset_multiview("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", multi_view=False, labeled=True, transforms_label=False, mode='supcon')
+    
+    # train_dataset_source = WHS_dataset(data_path_train_unl["source"], transforms=True)
+    # train_dataset_target = WHS_dataset(data_path_train_unl["target"], transforms=True)
+    if args.new_transform:
+        train_lbd_dataset_source = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, new_transforms=True, mode='train')
+    else:
+        train_lbd_dataset_source = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, mode='train')
+    # train_loader_source = create_loader(
+    #     train_dataset_source,
+    #     batch_size,
+    #     num_workers=num_workers,
+    #     shuffle=True
+    # )
+    # train_loader_target = create_loader(
+    #     train_dataset_target,
+    #     batch_size,
+    #     num_workers=num_workers,
+    #     shuffle=True
+    # )
     train_lbd_loader_source = create_loader(
         train_lbd_dataset_source,
         batch_size,
@@ -219,7 +227,10 @@ def set_loader(args):
         shuffle=True
     )
     
-    real_test_unl_dataset_target = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True)
+    if args.new_transform:
+        real_test_unl_dataset_target = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, new_transforms=True, mode='test')
+    else:
+        real_test_unl_dataset_target = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, mode='test')
     real_test_unl_loader_target = create_loader(
         real_test_unl_dataset_target,
         1,
@@ -231,8 +242,11 @@ def set_loader(args):
     num_batches = len(train_lbd_loader_source) + 1
     
     train_lbd_iter_source = ForeverDataIterator(train_lbd_loader_source)
-    train_iter_source = ForeverDataIterator(train_loader_source)
-    train_iter_target = ForeverDataIterator(train_loader_target)
+    # train_iter_source = ForeverDataIterator(train_loader_source)
+    # train_iter_target = ForeverDataIterator(train_loader_target)
+    # # train_iter_source = train_iter_target = None
+    train_iter_source=train_iter_target=None
+    
     train_loader = (train_lbd_iter_source, train_iter_source, train_iter_target, num_batches)
     
     return train_loader, real_test_unl_loader_target
@@ -274,14 +288,15 @@ def set_model(args, logger):
         model = model.cuda()
         cls_head = cls_head.cuda()
     
-    # criterion = nn.CrossEntropyLoss().cuda()
-    # criterion_noreduce = nn.CrossEntropyLoss(reduce=False).cuda()
-    if args.mode == "block":
-        criterion = BlockConLoss(temperature=args.temp, block_size=args.block_size)
-    elif args.mode == "stride":
-        criterion = LocalConLoss(temperature=args.temp, stride=args.stride)
-    else:
-        raise NotImplementedError("The feature downsampling mode is not supported yet!")
+    # # criterion = nn.CrossEntropyLoss().cuda()
+    # # criterion_noreduce = nn.CrossEntropyLoss(reduce=False).cuda()
+    # if args.mode == "block":
+    #     criterion = BlockConLoss(temperature=args.temp, block_size=args.block_size)
+    # elif args.mode == "stride":
+    #     criterion = LocalConLoss(temperature=args.temp, stride=args.stride)
+    # else:
+    #     raise NotImplementedError("The feature downsampling mode is not supported yet!")
+    criterion=None
     
     return model, cls_head, criterion
 
@@ -340,8 +355,11 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
         # superivsed setting
         _, images_lbd, labels = next(train_lbd_iter_source)
         images_lbd,labels = images_lbd.float().cuda(), labels.cuda()
-
+                
+        # noise = torch.clamp(torch.randn_like(images_lbd) * 0.1, -0.2, 0.2)
+        # feat_lbd,_,_,_ = model(images_lbd+noise)
         feat_lbd,_,_,_ = model(images_lbd)
+        
         feat_lbd = F.normalize(feat_lbd, dim=1)
         
         out_lbd = cls_head(feat_lbd.permute(0,2,3,1).reshape(-1,64))
@@ -349,9 +367,17 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
         
         loss_dice, _ = dice_loss(out_lbd, labels)
         loss_ce = ce_loss(out_lbd, labels.long())
+        
+        
+        # _, images_unl_source, _ = next(train_iter_source)
+        # _, images_unl_target, _ = next(train_iter_target)       
+        # images_unl = torch.cat([images_unl_source,images_unl_target], dim=0)
+        # images_unl = images_unl.float().cuda()
+        # _,_,_,_ = model(images_unl)
+        
 
         loss = loss_dice + loss_ce
-
+        
         losses.update(loss.item(), 256)
 
         # SGD
@@ -651,7 +677,7 @@ def main():
     best_val_metric = 0.
     best_val_metric_lcc = 0.
     for epoch in range(1, opt.epochs + 1):
-        adjust_learning_rate(opt, optimizer, epoch)
+        # adjust_learning_rate(opt, optimizer, epoch)
 
         # train for one epoch
         time1 = time.time()

@@ -306,8 +306,9 @@ def set_model(args, logger):
     if args.resume is not None:
         logger.info(f"Loading pretrained model '{args.resume}'")
         checkpoint = torch.load(args.resume, map_location="cpu")
-        del checkpoint['decoder.out_conv.weight']
-        del checkpoint['decoder.out_conv.bias']
+        if 'mr2mr_4labels' in args.resume:
+            del checkpoint['decoder.out_conv.weight']
+            del checkpoint['decoder.out_conv.bias']
         model_state_dict = checkpoint
         model.load_state_dict(model_state_dict, strict=False)
 
@@ -366,9 +367,12 @@ def set_model(args, logger):
 #     return optimizer
 
 def set_optimizer(args, model, cls_head):
-    lr = 0.01
-    weight_decay = 5e-4
-    conv_lr_ratio = 0.1
+    # lr = 0.01
+    # weight_decay = 5e-4
+    # conv_lr_ratio = 0.1
+    lr = args.learning_rate
+    weight_decay = args.weight_decay
+    conv_lr_ratio=False
 
     parameters = []
     # batch_norm layer: no weight_decay
@@ -487,6 +491,8 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+    supcon_losses = AverageMeter()
+    con_losses = AverageMeter()
 
     end = time.time()
     # for idx, data_batch in enumerate(train_loader):
@@ -499,47 +505,30 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
         
         
-        # superivsed setting
-        _, images_lbd, labels = next(train_lbd_iter_source)
-        # images_lbd = torch.cat([images_unl_source[0],images_unl_target[0],images_unl_source[1],images_unl_target[1]], dim=0)
-        images_lbd,labels = torch.cat(images_lbd, dim=0), torch.cat(labels, dim=0)
-        images_lbd,labels = images_lbd.cuda(), labels.cuda()
-
-        bsz = images_lbd.shape[0]//2
-        feat_lbd,_,_,_ = model(images_lbd)
-        feat_lbd = F.normalize(feat_lbd, dim=1)
-        f1, f2 = torch.split(feat_lbd, [bsz, bsz], dim=0)
-        feat_lbd = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)  # [bsz, n_view, c, img_size, img_size]
-        l1, l2 = torch.split(labels, [bsz, bsz], dim=0)
-        labels_supcon = torch.cat([l1.unsqueeze(1), l2.unsqueeze(1)], dim=1)
-        
-        out_lbd = cls_head(f1.permute(0,2,3,1).reshape(-1,64))
-        out_lbd = out_lbd.view(-1,256,256,5).permute(0,3,1,2)
-        
-        loss_supcon = criterion(feat_lbd, labels_supcon) 
-        if loss_supcon.mean() == 0:
-            continue
-        mask_supcon = (loss_supcon != 0)
-        mask_supcon = mask_supcon.int().cuda()
-        loss_supcon = (loss_supcon * mask_supcon).sum() / mask_supcon.sum()
-        # loss_supcon = 0.
-        
-        loss_dice, _ = dice_loss(out_lbd, labels[:bsz])
-        loss_ce = ce_loss(out_lbd, labels[:bsz].long())
-        
-        
         # # superivsed setting
         # _, images_lbd, labels = next(train_lbd_iter_source)
-        # images_lbd,labels = images_lbd.float().cuda(), labels.cuda()
+        # # images_lbd = torch.cat([images_unl_source[0],images_unl_target[0],images_unl_source[1],images_unl_target[1]], dim=0)
+        # images_lbd,labels = torch.cat(images_lbd, dim=0), torch.cat(labels, dim=0)
+        # images_lbd,labels = images_lbd.cuda(), labels.cuda()
 
+        # bsz = images_lbd.shape[0]//2
         # feat_lbd,_,_,_ = model(images_lbd)
         # feat_lbd = F.normalize(feat_lbd, dim=1)
+        # f1, f2 = torch.split(feat_lbd, [bsz, bsz], dim=0)
+        # feat_lbd = torch.cat([f1.unsqueeze(1), f2.unsqueeze(1)], dim=1)  # [bsz, n_view, c, img_size, img_size]
+        # l1, l2 = torch.split(labels, [bsz, bsz], dim=0)
+        # labels_supcon = torch.cat([l1.unsqueeze(1), l2.unsqueeze(1)], dim=1)
         
-        # out_lbd = cls_head(feat_lbd.permute(0,2,3,1).reshape(-1,64))
-        # out_lbd = out_lbd.view(-1,256,256,5).permute(0,3,1,2)
+        # # out_lbd = cls_head(f1.permute(0,2,3,1).reshape(-1,64))
+        # # out_lbd = out_lbd.view(-1,256,256,5).permute(0,3,1,2)
         
-        # loss_dice, _ = dice_loss(out_lbd, labels)
-        # loss_ce = ce_loss(out_lbd, labels.long())
+        # loss_supcon = criterion(feat_lbd, labels_supcon) 
+        # if loss_supcon.mean() == 0:
+        #     continue
+        # mask_supcon = (loss_supcon != 0)
+        # mask_supcon = mask_supcon.int().cuda()
+        # loss_supcon = (loss_supcon * mask_supcon).sum() / mask_supcon.sum()
+        loss_supcon = torch.tensor([0.]).cuda()
         
         
         
@@ -566,13 +555,15 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
         loss_con = (loss_con * mask_con).sum() / mask_con.sum()
 
         
-        loss = loss_con + loss_dice + loss_ce
-        # loss = loss_supcon + loss_con + loss_dice + loss_ce
+        # loss = loss_con + loss_dice + loss_ce
+        loss = loss_supcon + loss_con 
 
         # if torch.isinf(loss):
         #     logger.info(data_batch[0]['fnames'])
         #     logger.info(data_batch[0]['slice_idx'])
         #     logger.info(imgs.max().item(), imgs.min().item())
+        supcon_losses.update(loss_supcon.item(), 256)
+        con_losses.update(loss_con.item(), 256)
         losses.update(loss.item(), 256)
 
         # SGD
@@ -590,15 +581,16 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
         end = time.time()
 
         # logger.info info
-        if (idx + 1) % opt.print_freq == 0:
+        if (idx) % opt.print_freq == 0:
             num_iteration = idx + 1 + (epoch-1)*len(train_loader)
             logger_tb.add_scalar("train_loss", losses.avg, num_iteration)
             logger.info('Train: [{0}][{1}/{2}]\t'
                   'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'loss {loss.val:.3f} ({loss.avg:.3f})'.format(
+                  'SupconLoss {supconloss.val:.3f} ({supconloss.avg:.3f})\t'
+                  'ConLoss {conloss.val:.3f} ({conloss.avg:.3f})'.format(
                    epoch, idx + 1, num_batches, batch_time=batch_time,
-                   data_time=data_time, loss=losses))
+                   data_time=data_time, supconloss=supcon_losses,conloss=con_losses))
             sys.stdout.flush()
 
     return losses.avg
@@ -615,7 +607,8 @@ def test(args, test_loader, model, cls_head, logger):
 
     # current_val_metric = test_score(use_teacher=False)
     current_val_metric = test_score(args, test_loader, model, cls_head, logger)
-    current_val_metric_lcc = test_score_lcc(args, test_loader, model, cls_head, logger)
+    # current_val_metric_lcc = test_score_lcc(args, test_loader, model, cls_head, logger)
+    current_val_metric_lcc = 0.
     
     return current_val_metric, current_val_metric_lcc
 
@@ -632,6 +625,9 @@ def test_score(args, testloader, model, cls_head, logger):
     label_vol_lst = [np.zeros((256,256,256)) for _ in range(4)]
 
     for i_batch, (indices, images, labels, vol_indices, slice_indices) in enumerate(testloader):
+        # if i_batch>5:
+        #     break
+        
         volume_batch = images.float().cuda()
         label_batch = labels.numpy()
 
@@ -878,16 +874,17 @@ def main():
         time1 = time.time()
         loss = train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch, opt, dice_loss, ce_loss, logger)
         
-        if epoch%2==0:
+        if epoch%10==0:
             current_val_metric,current_val_metric_lcc = test(opt, test_loader, model, cls_head, logger)
             # update information
             if current_val_metric >= best_val_metric:
                 best_val_metric = current_val_metric
                 best_val_epoch = epoch        
-            if current_val_metric_lcc >= best_val_metric_lcc:
-                best_val_metric_lcc = current_val_metric_lcc
-                best_val_epoch_lcc = epoch
-            logger.info('Best Dice: %f (%d), lcc: %f (%d)'%(best_val_metric,best_val_epoch,best_val_metric_lcc,best_val_epoch_lcc))
+            logger.info('Best Dice: %f (%d)'%(best_val_metric,best_val_epoch))
+            # if current_val_metric_lcc >= best_val_metric_lcc:
+            #     best_val_metric_lcc = current_val_metric_lcc
+            #     best_val_epoch_lcc = epoch
+            # logger.info('Best Dice: %f (%d), lcc: %f (%d)'%(best_val_metric,best_val_epoch,best_val_metric_lcc,best_val_epoch_lcc))
             
         time2 = time.time()
         logger.info('epoch {}, total time {:.2f}'.format(epoch, time2 - time1))
