@@ -99,7 +99,7 @@ class WHS_dataset(data.Dataset):
                 self.raw_data += [f for f in glob.glob(dd+'/*') if '_label.npy' not in f]
         elif '.txt' in data_dir:
             with open(data_dir, 'r') as fp:
-                self.raw_data = [f.strip().replace('/home1/ziyuan/UDA/data/data_leuda_sifa_new/mr','/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr') for f in fp.readlines()]
+                self.raw_data = [f.strip().replace('/home1/ziyuan/UDA/data/data_leuda_sifa_new/mr','/home1/yichen/ProtoUDA/data/data_mmwhs/mr') for f in fp.readlines()]
         else:
             self.raw_data = [f for f in glob.glob(data_dir+'/*') if '_label.npy' not in f]
         # self.raw_data.sort() # check
