@@ -193,10 +193,10 @@ def set_loader(args):
     num_workers = 4
     batch_size = args.batch_size
 
-    data_path_train_unl={
-        'source':"/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like/org_mr",
-        'target':"/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like/fake_mr"
-    }
+    # data_path_train_unl={
+    #     'source':"/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like/org_mr",
+    #     'target':"/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like/fake_mr"
+    # }
     
     # train_dataset_source = WHS_dataset_multiview(data_path_train_unl["source"], multi_view=True)
     # train_dataset_target = WHS_dataset_multiview(data_path_train_unl["target"], multi_view=True)
@@ -205,9 +205,9 @@ def set_loader(args):
     # train_dataset_source = WHS_dataset(data_path_train_unl["source"], transforms=True)
     # train_dataset_target = WHS_dataset(data_path_train_unl["target"], transforms=True)
     if args.new_transform:
-        train_lbd_dataset_source = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, new_transforms=True, mode='train')
+        train_lbd_dataset_source = WHS_dataset("/home1/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, new_transforms=True, mode='train')
     else:
-        train_lbd_dataset_source = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, mode='train')
+        train_lbd_dataset_source = WHS_dataset("/home1/yichen/ProtoUDA/data/data_mmwhs/mr/mr_labeled/datalist/org_4labeled.txt", labeled=True, mode='train')
     # train_loader_source = create_loader(
     #     train_dataset_source,
     #     batch_size,
@@ -228,9 +228,9 @@ def set_loader(args):
     )
     
     if args.new_transform:
-        real_test_unl_dataset_target = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, new_transforms=True, mode='test')
+        real_test_unl_dataset_target = WHS_dataset("/home1/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, new_transforms=True, mode='test')
     else:
-        real_test_unl_dataset_target = WHS_dataset("/home/ziyuan/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, mode='test')
+        real_test_unl_dataset_target = WHS_dataset("/home1/yichen/ProtoUDA/data/data_mmwhs/mr/mr_like_test/fake_mr", labeled=True, is_real_test=True, mode='test')
     real_test_unl_loader_target = create_loader(
         real_test_unl_dataset_target,
         1,
