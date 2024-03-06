@@ -672,6 +672,8 @@ def main():
 
     # tensorboard
     logger_tb = SummaryWriter(opt.tb_folder)
+    
+    
 
     # training routine
     best_val_metric = 0.
@@ -683,7 +685,7 @@ def main():
         time1 = time.time()
         loss = train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch, opt, dice_loss, ce_loss, logger)
         
-        if epoch%2==0:
+        if epoch%5==0:
             current_val_metric,current_val_metric_lcc = test(opt, test_loader, model, cls_head, logger)
             # update information
             if current_val_metric >= best_val_metric:
@@ -692,7 +694,10 @@ def main():
             if current_val_metric_lcc >= best_val_metric_lcc:
                 best_val_metric_lcc = current_val_metric_lcc
                 best_val_epoch_lcc = epoch
+                save_file = os.path.join(opt.save_folder, 'best.pth'.format(epoch=epoch))
+                save_model(model, cls_head, optimizer, opt, epoch, save_file)
             logger.info('Best Dice: %f (%d), lcc: %f (%d)'%(best_val_metric,best_val_epoch,best_val_metric_lcc,best_val_epoch_lcc))
+            
             
         time2 = time.time()
         logger.info('epoch {}, total time {:.2f}'.format(epoch, time2 - time1))
@@ -701,15 +706,15 @@ def main():
         logger_tb.add_scalar('loss', loss, epoch)
         logger_tb.add_scalar('learning_rate', optimizer.param_groups[0]['lr'], epoch)
 
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt.pth'.format(epoch=epoch))
-            save_model(model, cls_head, optimizer, opt, epoch, save_file)
+        # if epoch % opt.save_freq == 0:
+        #     save_file = os.path.join(
+        #         opt.save_folder, 'ckpt.pth'.format(epoch=epoch))
+        #     save_model(model, cls_head, optimizer, opt, epoch, save_file)
 
     # save the last model
     # save_file = os.path.join(
     #   opt.save_folder, 'last.pth')
-    save_model(model, cls_head, optimizer, opt, opt.epochs, save_file)
+    # save_model(model, cls_head, optimizer, opt, opt.epochs, save_file)
 
 
 if __name__ == '__main__':
