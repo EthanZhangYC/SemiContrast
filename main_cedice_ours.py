@@ -688,7 +688,7 @@ def main():
         time1 = time.time()
         loss = train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch, opt, dice_loss, ce_loss, logger)
         
-        if epoch>=120 and epoch%5==0:
+        if epoch>=100 and epoch%5==0:
             current_val_metric,current_val_metric_lcc = test(opt, test_loader, model, cls_head, logger, best_val_metric)
             # update information
             if current_val_metric >= best_val_metric:
