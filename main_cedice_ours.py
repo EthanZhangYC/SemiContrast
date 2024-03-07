@@ -410,7 +410,7 @@ def train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch,
 
 
 @torch.no_grad()
-def test(args, test_loader, model, cls_head, logger):
+def test(args, test_loader, model, cls_head, logger, best_val_metric):
     model.eval()
     # if mean_teacher:
     #     model_t = model_t.eval()
@@ -420,7 +420,10 @@ def test(args, test_loader, model, cls_head, logger):
 
     # current_val_metric = test_score(use_teacher=False)
     current_val_metric = test_score(args, test_loader, model, cls_head, logger)
-    current_val_metric_lcc = test_score_lcc(args, test_loader, model, cls_head, logger)
+    if current_val_metric>=best_val_metric:
+        current_val_metric_lcc = test_score_lcc(args, test_loader, model, cls_head, logger)
+    else:
+        current_val_metric_lcc=0.
     
     return current_val_metric, current_val_metric_lcc
 
@@ -685,8 +688,8 @@ def main():
         time1 = time.time()
         loss = train(train_loader, model, cls_head, criterion, logger_tb, optimizer, epoch, opt, dice_loss, ce_loss, logger)
         
-        if epoch>120 and epoch%5==0:
-            current_val_metric,current_val_metric_lcc = test(opt, test_loader, model, cls_head, logger)
+        if epoch>=120 and epoch%5==0:
+            current_val_metric,current_val_metric_lcc = test(opt, test_loader, model, cls_head, logger, best_val_metric)
             # update information
             if current_val_metric >= best_val_metric:
                 best_val_metric = current_val_metric

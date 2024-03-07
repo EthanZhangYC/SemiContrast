@@ -134,7 +134,7 @@ python main_simclr.py \
 
 CUDA_VISIBLE_DEVICES=3 \
 python main_cedice_ours.py  \
---exp_dir results/0306_bs8_DiceCE_normaltransform_nolradjust_cdsfinalpretrain \
+--exp_dir results/0306_bs8_DiceCE_normaltransform_nolradjust_cdsfinalpretrain1 \
 --batch_size 8 \
 --epochs 150 \
 --mode stride \
@@ -176,7 +176,7 @@ python main_cedice_ours.py  \
 
 CUDA_VISIBLE_DEVICES=0 \
 python main_cedice_ours.py  \
---exp_dir results/0306_bs8_DiceCE_normaltransform_nolradjust_cosegsemifinalpretrain \
+--exp_dir results/0306_bs8_DiceCE_normaltransform_nolradjust_cosegsemifinalpretrain1 \
 --batch_size 8 \
 --epochs 150 \
 --mode stride \
